@@ -1,3 +1,4 @@
+use chrono::Local;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use ssh2::Session;
@@ -22,7 +23,8 @@ fn upload_via_sftp(server_ip: &str,
                    server_port: &str,
                    server_user: &str,
                    remote_path: &str,
-                   local_file: &str, ) -> Result<(), Box<dyn std::error::Error>>
+                   local_file: &str,
+                   ssh_key_path: &str) -> Result<(), Box<dyn std::error::Error>>
 {
     let tcp = TcpStream::connect(format!("{}:{}", server_ip, server_port))?;
     let mut sess = Session::new()?;
@@ -30,7 +32,7 @@ fn upload_via_sftp(server_ip: &str,
     sess.handshake()?;
 
     let mut private_key = Vec::new();
-    File::open("/.ssh/id_rsa")?.read_to_end(&mut private_key)?;
+    File::open(ssh_key_path)?.read_to_end(&mut private_key)?;
 
     sess.userauth_pubkey_memory(server_user, None, &String::from_utf8(private_key)?, None)?;
 
@@ -65,18 +67,24 @@ fn upload_via_sftp(server_ip: &str,
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
-
     let server_ip = env::var("SERVER_IP")?;
     let server_port = env::var("SERVER_PORT")?;
     let server_user = env::var("SERVER_USER")?;
     let server_directory = env::var("SERVER_DIRECTORY")?;
 
-    let backup_path = "/backup";
-    let output_file = "/tmp/backup.tar.gz";
+    const BACKUP_PATH: &str = "/backup";
+    const SSH_KEY_PATH: &str = "/.ssh/id_rsa";
 
-    compress_backup_folder(backup_path, output_file)?;
-    upload_via_sftp(&server_ip, &server_port, &server_user, &server_directory, output_file)?;
-    fs::remove_file(output_file)?;
+    // Generate timestamp for the backup filename
+    let now = Local::now();
+    let timestamp = now.format("%Y-%m-%dT%H-%M-%S").to_string();
+    let backup_name = format!("backup-{}.tar.gz", timestamp);
+    let backup_archive_path = format!("/tmp/{}", backup_name);
+    let server_backup_path = format!("{}/{}", server_directory, backup_name);
+
+    compress_backup_folder(BACKUP_PATH, &backup_archive_path)?;
+    upload_via_sftp(&server_ip, &server_port, &server_user, &server_backup_path, &backup_archive_path, SSH_KEY_PATH)?;
+    fs::remove_file(&backup_archive_path)?;
 
     println!("Backup completed successfully.");
     Ok(())
