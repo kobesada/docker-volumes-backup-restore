@@ -1,0 +1,10 @@
+[package]
+name = "backup"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dotenv = "0.15.0"
+flate2 = "1.0.33"
+ssh2 = "0.9.4"
+tar = "0.4.41"
