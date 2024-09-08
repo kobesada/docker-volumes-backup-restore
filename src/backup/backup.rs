@@ -1,6 +1,6 @@
 use crate::backup::compression::{compress_files_to_tar, compress_folder_to_tar};
 use crate::backup::docker::{start_containers, stop_containers};
-use crate::backup::sftp::upload_via_sftp;
+use crate::backup::scp::upload_via_scp;
 use chrono::Local;
 use cron::Schedule;
 use std::error::Error;
@@ -44,7 +44,7 @@ fn run_backup(
     let server_combined_backup_path = format!("{}/{}", server_directory, combined_backup_name);
 
     compress_files_to_tar(&archives_paths, &combined_backup_archive_path)?;
-    upload_via_sftp(server_ip, server_port, server_user, &server_combined_backup_path, &combined_backup_archive_path, ssh_key_path)?;
+    upload_via_scp(server_ip, server_port, server_user, &server_combined_backup_path, &combined_backup_archive_path, ssh_key_path)?;
     fs::remove_file(&combined_backup_archive_path)?;
 
     println!("Backup completed successfully.");

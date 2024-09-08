@@ -6,12 +6,12 @@ use std::net::TcpStream;
 use std::path::Path;
 use ssh2::Session;
 
-pub fn upload_via_sftp(server_ip: &str,
-                       server_port: &str,
-                       server_user: &str,
-                       remote_path: &str,
-                       local_file: &str,
-                       ssh_key_path: &str) -> Result<(), Box<dyn Error>>
+pub fn upload_via_scp(server_ip: &str,
+                      server_port: &str,
+                      server_user: &str,
+                      remote_path: &str,
+                      local_file: &str,
+                      ssh_key_path: &str) -> Result<(), Box<dyn Error>>
 {
     let tcp = TcpStream::connect(format!("{}:{}", server_ip, server_port))?;
     let mut sess = Session::new()?;
