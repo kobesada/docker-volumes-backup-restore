@@ -72,40 +72,41 @@ fn get_my_container_id() -> Result<String, Box<dyn Error>> {
     Ok(container_id)
 }
 
-fn manage_containers(action: &str, volumes: &[&str]) -> Result<(), Box<dyn Error>> {
-    for volume in volumes {
+fn start_containers(container_ids: Vec<String>) -> Result<(), Box<dyn Error>> {
+    for container_id in container_ids {
+        Command::new("docker")
+            .arg("start")
+            .arg(container_id)
+            .output()?;
+    }
+    Ok(())
+}
 
-        // Get the list of containers using the volume
-        let output = Command::new("docker")
-            .arg("ps")
-            .arg("-q")
-            .arg("--filter")
-            .arg(format!("volume={}", volume))
+fn stop_containers(volume: &str) -> Result<Vec<String>, Box<dyn Error>> {
+
+    // Get the list of containers using the volume
+    let output = Command::new("docker")
+        .arg("ps")
+        .arg("-q")
+        .arg("--filter")
+        .arg(format!("volume={}", volume))
+        .output()?;
+
+    let containers = String::from_utf8(output.stdout)?;
+    let mut container_ids: Vec<String> = Vec::new();
+
+    for container_id in containers.trim().split('\n') {
+        if container_id.is_empty() || container_id == get_my_container_id()? { continue; }
+
+        Command::new("docker")
+            .arg("stop")
+            .arg(container_id)
             .output()?;
 
-        let containers = String::from_utf8(output.stdout)?;
-
-        for container_id in containers.trim().split('\n') {
-            if container_id.is_empty() || container_id == get_my_container_id()? { continue; }
-            match action {
-                "stop" => {
-                    Command::new("docker")
-                        .arg("stop")
-                        .arg(container_id)
-                        .output()?;
-                }
-                "start" => {
-                    Command::new("docker")
-                        .arg("start")
-                        .arg(container_id)
-                        .output()?;
-                }
-                _ => {}
-            }
-        }
+        container_ids.push(container_id.to_string());
     }
 
-    Ok(())
+    Ok(container_ids)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -125,15 +126,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let backup_archive_path = format!("/tmp/{}", backup_name);
     let server_backup_path = format!("{}/{}", server_directory, backup_name);
 
-    // Stop containers using the volumes
-    manage_containers("stop", &["deels_media", "deels_db"])?;
+    let media_container_ids = stop_containers("deels_media")?;
+    let db_container_ids = stop_containers("deels_db")?;
 
     compress_backup_folder(BACKUP_PATH, &backup_archive_path)?;
+
+    start_containers(media_container_ids)?;
+    start_containers(db_container_ids)?;
+
     upload_via_sftp(&server_ip, &server_port, &server_user, &server_backup_path, &backup_archive_path, SSH_KEY_PATH)?;
     fs::remove_file(&backup_archive_path)?;
-
-    // Restart containers after backup is done
-    manage_containers("start", &["deels_media", "deels_db"])?;
 
     println!("Backup completed successfully.");
     Ok(())
