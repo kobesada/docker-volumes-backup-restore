@@ -3,10 +3,12 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use ssh2::Session;
 use std::env;
+use std::error::Error;
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::path::Path;
+use std::process::Command;
 use tar::Builder;
 
 fn compress_backup_folder(backup_path: &str, output_file: &str) -> std::io::Result<()> {
@@ -24,7 +26,7 @@ fn upload_via_sftp(server_ip: &str,
                    server_user: &str,
                    remote_path: &str,
                    local_file: &str,
-                   ssh_key_path: &str) -> Result<(), Box<dyn std::error::Error>>
+                   ssh_key_path: &str) -> Result<(), Box<dyn Error>>
 {
     let tcp = TcpStream::connect(format!("{}:{}", server_ip, server_port))?;
     let mut sess = Session::new()?;
@@ -64,8 +66,49 @@ fn upload_via_sftp(server_ip: &str,
     Ok(())
 }
 
+fn get_my_container_id() -> Result<String, Box<dyn Error>> {
+    let output = Command::new("hostname").output()?;
+    let container_id = String::from_utf8(output.stdout)?.trim().to_string();
+    Ok(container_id)
+}
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn manage_containers(action: &str, volumes: &[&str]) -> Result<(), Box<dyn Error>> {
+    for volume in volumes {
+
+        // Get the list of containers using the volume
+        let output = Command::new("docker")
+            .arg("ps")
+            .arg("-q")
+            .arg("--filter")
+            .arg(format!("volume={}", volume))
+            .output()?;
+
+        let containers = String::from_utf8(output.stdout)?;
+
+        for container_id in containers.trim().split('\n') {
+            if container_id.is_empty() || container_id == get_my_container_id()? { continue; }
+            match action {
+                "stop" => {
+                    Command::new("docker")
+                        .arg("stop")
+                        .arg(container_id)
+                        .output()?;
+                }
+                "start" => {
+                    Command::new("docker")
+                        .arg("start")
+                        .arg(container_id)
+                        .output()?;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
     dotenv::dotenv().ok();
     let server_ip = env::var("SERVER_IP")?;
     let server_port = env::var("SERVER_PORT")?;
@@ -82,9 +125,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backup_archive_path = format!("/tmp/{}", backup_name);
     let server_backup_path = format!("{}/{}", server_directory, backup_name);
 
+    // Stop containers using the volumes
+    manage_containers("stop", &["deels_media", "deels_db"])?;
+
     compress_backup_folder(BACKUP_PATH, &backup_archive_path)?;
     upload_via_sftp(&server_ip, &server_port, &server_user, &server_backup_path, &backup_archive_path, SSH_KEY_PATH)?;
     fs::remove_file(&backup_archive_path)?;
+
+    // Restart containers after backup is done
+    manage_containers("start", &["deels_media", "deels_db"])?;
 
     println!("Backup completed successfully.");
     Ok(())
