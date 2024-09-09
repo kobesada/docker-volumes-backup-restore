@@ -1,3 +1,4 @@
+use crate::backup::run_backup;
 use crate::utility::compression::decompress_file_from_tar;
 use crate::utility::docker::{start_containers, stop_containers};
 use crate::utility::server::{download_from_server, get_latest_backup_file_name_from_server};
@@ -28,6 +29,9 @@ pub fn restore_volumes(server_ip: &str,
     let volumes_temp_path = format!("{}/volumes", temp_path);
 
     let volume_names = extract_volumes_from_backup(&local_backup_path, volumes_to_be_restored, &volumes_temp_path)?;
+
+    // perform backup before the restoration
+    run_backup(server_ip, server_port, server_user, server_directory, ssh_key_path, temp_path)?;
 
     for volume in &volume_names {
         let volume_backup_path = format!("{}/{}.tar.gz", volumes_temp_path, volume);
