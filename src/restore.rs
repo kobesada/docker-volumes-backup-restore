@@ -1,7 +1,8 @@
 use crate::backup::run_backup;
 use crate::utility::compression::decompress_file_from_tar;
+use crate::utility::configs::server_config::ServerConfig;
 use crate::utility::docker::{start_containers, stop_containers};
-use crate::utility::server::{download_from_server, get_latest_backup_file_name_from_server};
+use crate::utility::server::Server;
 use fs_extra::dir::CopyOptions;
 use fs_extra::{move_items, remove_items};
 use std::error::Error;
@@ -20,37 +21,31 @@ use std::path::Path;
 ///
 /// # Arguments
 ///
-/// * `server_ip` - A string slice representing the IP address of the remote server.
-/// * `server_port` - A string slice representing the SSH port on the remote server.
-/// * `server_user` - A string slice representing the username for SSH authentication.
-/// * `server_directory` - A string slice representing the directory on the server where backup files are stored.
+/// * `server_config` - A reference to a `ServerConfig` containing connection info to the server.
 /// * `backup_to_be_restored` - A string slice representing the backup file to restore, or "latest" for the most recent backup.
 /// * `volumes_to_be_restored` - A string slice representing the volumes to restore, comma-separated, or "all" to restore all volumes.
-/// * `ssh_key_path` - A string slice representing the path to the SSH private key used for authentication.
 /// * `temp_path` - A string slice representing the path to a temporary directory for storing the backup during restoration.
 ///
 /// # Returns
 ///
 /// * `Result<(), Box<dyn Error>>` - An empty result if the restoration is successful, or an error if something goes wrong.
-pub fn restore_volumes(server_ip: &str,
-                       server_port: &str,
-                       server_user: &str,
-                       server_directory: &str,
+pub fn restore_volumes(server_config: &ServerConfig,
                        backup_to_be_restored: &str,
                        volumes_to_be_restored: &str,
-                       ssh_key_path: &str,
                        temp_path: &str) -> Result<(), Box<dyn Error>> {
+    let server = Server::new(server_config.clone());
+
     // Determine the backup file to restore (either specified or the latest)
     let backup_file_name = if backup_to_be_restored == "latest" {
-        get_latest_backup_file_name_from_server(server_ip, server_port, server_user, server_directory, ssh_key_path)?
+        server.get_latest_backup_file_name()?
     } else { backup_to_be_restored.to_string() };
 
     // Define paths for the local and remote backup files
     let local_backup_path = format!("{}/{}", temp_path, backup_file_name);
-    let remote_backup_path = format!("{}/{}", server_directory, backup_file_name);
+    let remote_backup_path = format!("{}/{}", server_config.server_directory, backup_file_name);
 
     // Download the backup file from the remote server
-    download_from_server(server_ip, server_port, server_user, &remote_backup_path, &local_backup_path, ssh_key_path)?;
+    server.download_file(&remote_backup_path, &local_backup_path)?;
 
     // Define the temporary path for extracted volumes
     let volumes_temp_path = format!("{}/volumes", temp_path);
@@ -59,7 +54,7 @@ pub fn restore_volumes(server_ip: &str,
     let volume_names = extract_volumes_from_backup(&local_backup_path, volumes_to_be_restored, &volumes_temp_path)?;
 
     // Perform a backup before restoration
-    run_backup(server_ip, server_port, server_user, server_directory, ssh_key_path, temp_path)?;
+    run_backup(server_config, temp_path)?;
 
     // Restore each volume by decompressing and replacing existing data
     for volume in &volume_names {

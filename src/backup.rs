@@ -1,6 +1,8 @@
 use crate::utility::compression::{compress_files_to_tar, compress_folder_to_tar};
+use crate::utility::configs::retention_config::RetentionConfig;
+use crate::utility::configs::server_config::ServerConfig;
 use crate::utility::docker::{start_containers, stop_containers};
-use crate::utility::server::upload_to_server;
+use crate::utility::server::Server;
 use chrono::Local;
 use cron::Schedule;
 use std::error::Error;
@@ -17,23 +19,18 @@ use tokio::time::{sleep, Duration};
 ///
 /// # Arguments
 ///
-/// * `server_ip` - The IP address of the server to which the backup will be uploaded.
-/// * `server_port` - The port on which the server is listening.
-/// * `server_user` - The username for authenticating to the server.
-/// * `server_directory` - The directory on the server where backups will be stored.
-/// * `backup_cron` - A cron expression defining the backup schedule.
+/// * `server_config` - A reference to a `ServerConfig` containing connection info to the server.
+/// * `backup_cron` - A cron expression that defines the schedule for the backups.
 /// * `ssh_key_path` - The path to the SSH private key used for authenticating to the server.
 /// * `temp_path` - The local path where temporary backup files will be stored.
 ///
 /// # Returns
 ///
-/// * `Result<(), Box<dyn Error>>` - An empty result if successful, or an error if something goes wrong.
-pub async fn configure_cron_scheduled_backup(server_ip: &str,
-                                             server_port: &str,
-                                             server_user: &str,
-                                             server_directory: &str,
+/// * `Result<(), Box<dyn Error>>` - Returns an empty result if the operation is successful.
+///   Otherwise, it returns an error wrapped in a `Box<dyn Error>`.
+pub async fn configure_cron_scheduled_backup(server_config: &ServerConfig,
+                                             retention_config: &RetentionConfig,
                                              backup_cron: &str,
-                                             ssh_key_path: &str,
                                              temp_path: &str) -> Result<(), Box<dyn Error>> {
     let schedule = Schedule::from_str(backup_cron)?;
 
@@ -51,7 +48,8 @@ pub async fn configure_cron_scheduled_backup(server_ip: &str,
             let duration = next_time - now;
             sleep(Duration::from_secs(duration.num_seconds() as u64)).await;
 
-            run_backup(&server_ip, &server_port, &server_user, &server_directory, &ssh_key_path, temp_path)?;
+            run_backup(server_config, temp_path)?;
+            remove_old_backups(server_config, retention_config)?
         }
     }
 }
@@ -66,22 +64,13 @@ pub async fn configure_cron_scheduled_backup(server_ip: &str,
 ///
 /// # Arguments
 ///
-/// * `server_ip` - The IP address of the server to which the backup will be uploaded.
-/// * `server_port` - The port on which the server is listening.
-/// * `server_user` - The username for authenticating to the server.
-/// * `server_directory` - The directory on the server where the backup will be stored.
-/// * `ssh_key_path` - The path to the SSH private key used for authenticating to the server.
+/// * `server_config` - A reference to a `ServerConfig` containing connection info to the server.
 /// * `temp_path` - The local path where temporary backup files will be stored.
 ///
 /// # Returns
 ///
 /// * `Result<(), Box<dyn Error>>` - An empty result if successful, or an error if something goes wrong.
-pub fn run_backup(server_ip: &str,
-                  server_port: &str,
-                  server_user: &str,
-                  server_directory: &str,
-                  ssh_key_path: &str,
-                  temp_path: &str) -> Result<(), Box<dyn Error>> {
+pub fn run_backup(server_config: &ServerConfig, temp_path: &str) -> Result<(), Box<dyn Error>> {
     const BACKUP_PATH: &str = "/backup";
 
     let mut archives_paths: Vec<String> = Vec::new();
@@ -102,11 +91,12 @@ pub fn run_backup(server_ip: &str,
     let timestamp = now.format("%Y-%m-%dT%H-%M-%S").to_string();
     let combined_backup_name = format!("backup-{}.tar.gz", timestamp);
     let combined_backup_archive_path = format!("{}/{}", temp_path, combined_backup_name);
-    let server_combined_backup_path = format!("{}/{}", server_directory, combined_backup_name);
+    let server_combined_backup_path = format!("{}/{}", server_config.server_directory, combined_backup_name);
     compress_files_to_tar(&archives_paths, &combined_backup_archive_path)?;
 
     // Upload backup to server and delete temporary files
-    upload_to_server(server_ip, server_port, server_user, &server_combined_backup_path, &combined_backup_archive_path, ssh_key_path)?;
+    Server::new(server_config.clone()).upload_file(&server_combined_backup_path,
+                                                   &combined_backup_archive_path)?;
     fs::remove_dir_all(temp_path)?;
 
     println!("Backup completed successfully.");
@@ -132,3 +122,12 @@ fn get_volume_dirs(backup_folder_path: &str) -> Result<Vec<String>, Box<dyn Erro
         .filter_map(|entry| entry.file_name().into_string().ok())
         .collect())
 }
+
+
+pub fn remove_old_backups(
+    server_config: &ServerConfig,
+    retention_config: &RetentionConfig,
+) -> Result<(), Box<dyn Error>> {
+    Ok(())
+}
+
