@@ -15,7 +15,7 @@ pub async fn configure_backup(
     server_directory: &str,
     backup_cron: &str,
     ssh_key_path: &str,
-    backup_temp_path: &str,
+    temp_path: &str,
 ) -> Result<(), Box<dyn Error>> {
     let schedule = Schedule::from_str(backup_cron)?;
 
@@ -33,7 +33,7 @@ pub async fn configure_backup(
             let duration = next_time - now;
             sleep(Duration::from_secs(duration.num_seconds() as u64)).await;
 
-            run_backup(&server_ip, &server_port, &server_user, &server_directory, &ssh_key_path, backup_temp_path)?;
+            run_backup(&server_ip, &server_port, &server_user, &server_directory, &ssh_key_path, temp_path)?;
         }
     }
 }
@@ -44,14 +44,14 @@ pub fn run_backup(
     server_user: &str,
     server_directory: &str,
     ssh_key_path: &str,
-    backup_temp_path: &str,
+    temp_path: &str,
 ) -> Result<(), Box<dyn Error>> {
     const BACKUP_PATH: &str = "/backup";
 
     let mut archives_paths: Vec<String> = Vec::new();
 
     for volume in &get_volume_dirs(BACKUP_PATH)? {
-        let backup_archive_path = format!("{}/{}.tar.gz", backup_temp_path, volume);
+        let backup_archive_path = format!("{}/{}.tar.gz", temp_path, volume);
         let volume_path = format!("{}/{}", BACKUP_PATH, volume);
         archives_paths.push(backup_archive_path.clone());
 
@@ -63,7 +63,7 @@ pub fn run_backup(
     let now = Local::now();
     let timestamp = now.format("%Y-%m-%dT%H-%M-%S").to_string();
     let combined_backup_name = format!("backup-{}.tar.gz", timestamp);
-    let combined_backup_archive_path = format!("{}/{}", backup_temp_path, combined_backup_name);
+    let combined_backup_archive_path = format!("{}/{}", temp_path, combined_backup_name);
     let server_combined_backup_path = format!("{}/{}", server_directory, combined_backup_name);
 
     compress_files_to_tar(&archives_paths, &combined_backup_archive_path)?;
