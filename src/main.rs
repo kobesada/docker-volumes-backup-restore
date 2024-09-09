@@ -2,7 +2,7 @@ mod restore;
 mod backup;
 mod utility;
 
-use crate::backup::configure_backup;
+use crate::backup::configure_cron_scheduled_backup;
 use crate::restore::restore_volumes;
 use std::error::Error;
 use std::path::Path;
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     match action.as_str() {
         "backup" => {
             let backup_cron = env::var("BACKUP_CRON")?;
-            configure_backup(
+            configure_cron_scheduled_backup(
                 &server_ip,
                 &server_port,
                 &server_user,
