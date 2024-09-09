@@ -1,6 +1,6 @@
-use crate::backup::utility::compression::decompress_file_from_tar;
-use crate::backup::utility::docker::{start_containers, stop_containers};
-use crate::backup::utility::server_communication::{download_from_server, get_latest_backup_file_name_from_server};
+use crate::utility::compression::decompress_file_from_tar;
+use crate::utility::docker::{start_containers, stop_containers};
+use crate::utility::server::{download_from_server, get_latest_backup_file_name_from_server};
 use fs_extra::dir::CopyOptions;
 use fs_extra::{move_items, remove_items};
 use std::error::Error;

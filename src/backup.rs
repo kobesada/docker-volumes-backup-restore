@@ -1,6 +1,6 @@
-use crate::backup::utility::compression::{compress_files_to_tar, compress_folder_to_tar};
-use crate::backup::utility::docker::{start_containers, stop_containers};
-use crate::backup::utility::server_communication::upload_to_server;
+use crate::utility::compression::{compress_files_to_tar, compress_folder_to_tar};
+use crate::utility::docker::{start_containers, stop_containers};
+use crate::utility::server::upload_to_server;
 use chrono::Local;
 use cron::Schedule;
 use std::error::Error;
@@ -27,6 +27,8 @@ pub async fn configure_backup(
         if let Some(next_time) = upcoming {
             if last.is_some() && last.unwrap() >= next_time { continue; }
             last = Some(next_time);
+
+            println!("Next backup will be performed at: {}", next_time);
 
             let duration = next_time - now;
             sleep(Duration::from_secs(duration.num_seconds() as u64)).await;

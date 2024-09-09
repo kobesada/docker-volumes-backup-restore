@@ -1,7 +1,9 @@
+mod restore;
 mod backup;
+mod utility;
 
-use crate::backup::backup::configure_backup;
-use crate::backup::restore::restore_volumes;
+use crate::backup::configure_backup;
+use crate::restore::restore_volumes;
 use std::error::Error;
 use std::path::Path;
 use std::{env, fs};
