@@ -1,27 +1,29 @@
 use crate::utility::compression::{compress_files_to_tar, compress_folder_to_tar};
-use crate::utility::configs::retention_config::RetentionConfig;
+use crate::utility::configs::retention_policy::RetentionPolicy;
 use crate::utility::configs::server_config::ServerConfig;
 use crate::utility::docker::{start_containers, stop_containers};
 use crate::utility::server::Server;
-use chrono::Local;
+use chrono::{DateTime, Duration, Local, NaiveDateTime, TimeZone, Utc};
 use cron::Schedule;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
 use std::str::FromStr;
-use tokio::time::{sleep, Duration};
+use tokio::time::sleep;
 
 /// Configures and manages a scheduled backup process based on a cron expression.
 ///
 /// This function continuously checks for the next scheduled backup time as defined
 /// by the `backup_cron` expression. When the next scheduled time arrives, it performs
-/// the backup process by calling `run_backup`. It then logs the time of the next backup
-/// and waits until that time is reached.
+/// the backup process by calling `run_backup`. After completing the backup, it removes
+/// old backups based on the retention policy provided in `retention_config`. It then logs
+/// the time of the next backup and waits until that time is reached.
 ///
 /// # Arguments
 ///
-/// * `server_config` - A reference to a `ServerConfig` containing connection info to the server.
+/// * `server_config` - A reference to a `ServerConfig` containing connection information for the server.
+/// * `retention_config` - A reference to a `RetentionConfig` that defines the retention policy for old backups.
 /// * `backup_cron` - A cron expression that defines the schedule for the backups.
-/// * `ssh_key_path` - The path to the SSH private key used for authenticating to the server.
 /// * `temp_path` - The local path where temporary backup files will be stored.
 ///
 /// # Returns
@@ -29,7 +31,7 @@ use tokio::time::{sleep, Duration};
 /// * `Result<(), Box<dyn Error>>` - Returns an empty result if the operation is successful.
 ///   Otherwise, it returns an error wrapped in a `Box<dyn Error>`.
 pub async fn configure_cron_scheduled_backup(server_config: &ServerConfig,
-                                             retention_config: &RetentionConfig,
+                                             retention_config: &RetentionPolicy,
                                              backup_cron: &str,
                                              temp_path: &str) -> Result<(), Box<dyn Error>> {
     let schedule = Schedule::from_str(backup_cron)?;
@@ -46,34 +48,40 @@ pub async fn configure_cron_scheduled_backup(server_config: &ServerConfig,
             println!("Next backup will be performed at: {}", next_time);
 
             let duration = next_time - now;
-            sleep(Duration::from_secs(duration.num_seconds() as u64)).await;
+            sleep(std::time::Duration::from_secs(duration.num_seconds() as u64)).await;
 
-            run_backup(server_config, temp_path)?;
-            remove_old_backups(server_config, retention_config)?
+            run_backup(server_config, retention_config, temp_path)?;
         }
     }
 }
 
-/// Performs a backup operation by compressing Docker volumes (folders in "/backup" folder)
-/// and uploading them to a remote server.
+/// Performs a backup operation by compressing Docker volumes (folders in the "/backup" directory)
+/// and uploading them to a remote server. Afterward, the function removes old backups according
+/// to the retention policy provided in `retention_config`.
 ///
 /// This function stops the containers associated with each volume, compresses the volume's
 /// data into a tar.gz archive, and then restarts the containers. It then combines all
 /// individual volume backups into a single archive, which is uploaded to the specified
 /// server.
 ///
+/// After the upload, the function removes temporary backup files and runs the `remove_old_backups`
+/// function to ensure old backups are deleted based on the specified retention policy.
+///
 /// # Arguments
 ///
-/// * `server_config` - A reference to a `ServerConfig` containing connection info to the server.
+/// * `server_config` - A reference to a `ServerConfig` containing connection information for the server.
+/// * `retention_config` - A reference to a `RetentionConfig` that defines how many backups to retain.
 /// * `temp_path` - The local path where temporary backup files will be stored.
 ///
 /// # Returns
 ///
 /// * `Result<(), Box<dyn Error>>` - An empty result if successful, or an error if something goes wrong.
-pub fn run_backup(server_config: &ServerConfig, temp_path: &str) -> Result<(), Box<dyn Error>> {
+pub fn run_backup(server_config: &ServerConfig, retention_config: &RetentionPolicy, temp_path: &str) -> Result<(), Box<dyn Error>> {
     const BACKUP_PATH: &str = "/backup";
 
     let mut archives_paths: Vec<String> = Vec::new();
+
+    remove_old_backups(server_config, retention_config)?;
 
     // Compress each volume directory into a tar.gz archive
     for volume in &get_volume_dirs(BACKUP_PATH)? {
@@ -99,6 +107,8 @@ pub fn run_backup(server_config: &ServerConfig, temp_path: &str) -> Result<(), B
                                                    &combined_backup_archive_path)?;
     fs::remove_dir_all(temp_path)?;
 
+    remove_old_backups(server_config, retention_config)?;
+
     println!("Backup completed successfully.");
     Ok(())
 }
@@ -123,11 +133,74 @@ fn get_volume_dirs(backup_folder_path: &str) -> Result<Vec<String>, Box<dyn Erro
         .collect())
 }
 
-
 pub fn remove_old_backups(
     server_config: &ServerConfig,
-    retention_config: &RetentionConfig,
+    retention_config: &RetentionPolicy,
 ) -> Result<(), Box<dyn Error>> {
+    let server = Server::new(server_config.clone());
+
+    // Fetch the list of backup files from the server
+    let backup_names = server.list_files()?.into_iter().filter(|file_name|
+        file_name.starts_with("backup-") && file_name.ends_with(".tar.gz")).collect();
+
+    let backups_to_delete = filter_backups_to_delete(backup_names, retention_config);
+
+    // Delete old backups that are not retained
+    for file_name in backups_to_delete {
+        server.delete_file(&file_name)?;
+    }
+
     Ok(())
 }
 
+/// Helper function to parse the backup name to a DateTime object
+fn parse_backup_date(backup: &str) -> Option<DateTime<Utc>> {
+    let prefix = "backup-";
+    let suffix = ".tar.gz";
+
+    if !backup.starts_with(prefix) || !backup.ends_with(suffix) {
+        return None;
+    }
+
+    let datetime_str = &backup[prefix.len()..backup.len() - suffix.len()];
+    if let Ok(naive_dt) = NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%dT%H-%M-%S") {
+        return Some(Utc.from_utc_datetime(&naive_dt));
+    }
+
+    None
+}
+
+/// Function to filter backups that will NOT be persisted based on retention rules
+pub fn filter_backups_to_delete(backups: Vec<String>, retention: &RetentionPolicy) -> Vec<String> {
+    let now = Utc::now();
+    let retention_period = Duration::days(retention.period as i64);
+
+    // Parse backups and filter based on the retention period
+    let mut backups_with_dates: Vec<(String, DateTime<Utc>)> = backups.iter()
+        .filter_map(|b| parse_backup_date(b).map(|d| (b.clone(), d))) // Clone the backup string here
+        .collect();
+
+    // Filter out backups older than the retention period
+    backups_with_dates.retain(|(_, date)| date > &(now - retention_period));
+
+    // Sort backups by date in descending order (newest first)
+    backups_with_dates.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Collect backups to keep, ensuring one per interval
+    let mut retained_backups: HashSet<String> = HashSet::new();
+
+    let keep_interval = (backups_with_dates.len() as f64 / retention.count as f64).ceil() as usize;
+    let mut last_keep_index = 0;
+
+    for (i, (backup, _)) in backups_with_dates.iter().enumerate() {
+        if i == 0 || (i - last_keep_index) >= keep_interval {
+            retained_backups.insert(backup.clone());
+            last_keep_index = i;
+        }
+    }
+
+    // Filter original backups to determine which should be deleted
+    backups.into_iter()
+        .filter(|b| !retained_backups.contains(b))
+        .collect()
+}

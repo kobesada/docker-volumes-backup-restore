@@ -2,13 +2,13 @@ mod restore;
 mod backup;
 mod utility;
 
-use crate::backup::configure_cron_scheduled_backup;
+use crate::backup::{configure_cron_scheduled_backup, run_backup};
 use crate::restore::restore_volumes;
+use crate::utility::configs::retention_policy::RetentionPolicy;
 use crate::utility::configs::server_config::ServerConfig;
 use std::error::Error;
 use std::path::Path;
 use std::{env, fs};
-use crate::utility::configs::retention_config::RetentionConfig;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -24,13 +24,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match action.as_str() {
         "backup" => {
-            let backup_cron = env::var("BACKUP_CRON")?;
-            let retention_config = RetentionConfig::new_from_env()?;
+            let retention_config = RetentionPolicy::new_from_env()?;
 
-            configure_cron_scheduled_backup(&server_config,
-                                            &retention_config,
-                                            &backup_cron,
-                                            BACKUP_TEMP_PATH).await?;
+            if let Ok(backup_cron) = env::var("BACKUP_CRON") {
+                configure_cron_scheduled_backup(&server_config,
+                                                &retention_config,
+                                                &backup_cron,
+                                                BACKUP_TEMP_PATH).await?;
+            } else { run_backup(&server_config, &retention_config, BACKUP_TEMP_PATH)?; }
         }
         "restore" => {
             let backup_to_be_restored = env::var("BACKUP_TO_BE_RESTORED")?;
