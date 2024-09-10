@@ -4,9 +4,11 @@ COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
 RUN cargo build --release
 
-FROM backup-runtime
+FROM ubuntu:24.04
 WORKDIR /app
 COPY --from=builder /app/target/release/backup .
 
-# Run the binary
+RUN apt-get update
+RUN apt-get install -y openssh-client docker.io
+
 CMD ["./backup"]
