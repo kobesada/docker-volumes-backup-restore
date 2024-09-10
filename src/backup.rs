@@ -85,8 +85,6 @@ pub fn run_backup(server_config: &ServerConfig, retention_config: &RetentionPoli
 
     let mut archives_paths: Vec<String> = Vec::new();
 
-    remove_old_backups(server_config, retention_config)?;
-
     let volume_names = get_volume_dirs(BACKUP_PATH)?;
 
     // Compress each volume directory into a tar.gz archive

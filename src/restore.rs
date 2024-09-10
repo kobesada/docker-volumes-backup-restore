@@ -58,7 +58,7 @@ pub fn restore_volumes(server_config: &ServerConfig,
     let volume_names = extract_volumes_from_backup(&local_backup_path, volumes_to_be_restored, &volumes_temp_path)?;
 
     // Perform a backup before restoration
-    run_backup(server_config, &RetentionPolicy::new_no_delete(), temp_path)?;
+    run_backup(server_config, &RetentionPolicy::new_no_delete(), &format!("{}/before-restore", temp_path))?;
 
     // Restore each volume by decompressing and replacing existing data
     for volume in &volume_names {
