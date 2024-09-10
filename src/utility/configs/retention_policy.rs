@@ -14,7 +14,7 @@ impl RetentionPolicy {
     /// This method reads the following environment variables:
     ///
     /// - `BACKUP_RETENTION_COUNT`: The maximum number of backups to retain.
-    /// - `BACKUP_RETENTION_PERIOD`: The number of days to retain backups, deleting backups older than this.
+    /// - `BACKUP_RETENTION_PERIOD_IN_DAYS`: The number of days to retain backups, deleting backups older than this.
     ///
     /// If an environment variable is not set, it will use a default value.
     ///
@@ -24,7 +24,7 @@ impl RetentionPolicy {
     pub fn new_from_env() -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             count: Self::parse_env_or_default("BACKUP_RETENTION_COUNT", usize::MAX),
-            period: Self::parse_env_or_default("BACKUP_RETENTION_PERIOD", usize::MAX),
+            period: Self::parse_env_or_default("BACKUP_RETENTION_PERIOD_IN_DAYS", usize::MAX),
         })
     }
 
