@@ -90,8 +90,9 @@ pub fn run_backup(server_config: &ServerConfig, retention_config: &RetentionPoli
         archives_paths.push(backup_archive_path.clone());
 
         let container_ids = stop_containers(volume)?;
-        compress_folder_to_tar(&volume_path, &backup_archive_path)?;
+        let result = compress_folder_to_tar(&volume_path, &backup_archive_path);
         start_containers(container_ids)?;
+        result?
     }
 
     // Combine all volume archives into a single backup file with a timestamp
