@@ -23,18 +23,18 @@ impl RetentionPolicy {
     /// Returns an `Err` if any of the environment variables cannot be parsed as `usize`.
     pub fn new_from_env() -> Result<Self, Box<dyn Error>> {
         Ok(Self {
-            count: Self::parse_env_or_default("BACKUP_RETENTION_COUNT", usize::MAX),
-            period: Self::parse_env_or_default("BACKUP_RETENTION_PERIOD_IN_DAYS", usize::MAX),
+            count: Self::parse_env_or_default("BACKUP_RETENTION_COUNT", 100000000),
+            period: Self::parse_env_or_default("BACKUP_RETENTION_PERIOD_IN_DAYS", 100000),
         })
     }
 
     /// Creates a `RetentionConfig` instance with no backups ever deleted.
     ///
     /// This represents a configuration where:
-    /// - `backup_retention_count` is set to `usize::MAX` (infinity).
-    /// - `backup_retention_period` is set to `usize::MAX` (infinity days).
+    /// - `backup_retention_count` is set to `100000000` (infinity).
+    /// - `backup_retention_period` is set to `100000` 273 years (infinity days).
     pub fn new_no_delete() -> Self {
-        Self { count: usize::MAX, period: usize::MAX }
+        Self { count: 100000000, period: 100000 }
     }
 
     /// Helper function to parse an environment variable as `usize`, defaulting to the provided value if not set or invalid.

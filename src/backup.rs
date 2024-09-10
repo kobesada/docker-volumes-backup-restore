@@ -214,15 +214,20 @@ fn filter_backups_to_delete(backups: Vec<String>, retention: &RetentionPolicy) -
     // Collect backups to keep, ensuring one per interval
     let mut retained_backups: HashSet<String> = HashSet::new();
 
-    // Filter the backups that they are evenly distributed through the retention period
-    let keep_interval = (backups_with_dates.len() as f64 / retention.count as f64).ceil() as usize;
-    let mut last_keep_index = 0;
+    // Filter the backups that they are evenly distributed through the retention period.
+    while retained_backups.len() < retention.count {
+        let keep_interval = (backups_with_dates.len() as f64 / (retention.count - retained_backups.len()) as f64).ceil() as usize;
+        let mut last_keep_index = 0;
 
-    for (i, (backup, _)) in backups_with_dates.iter().enumerate() {
-        if i == 0 || (i - last_keep_index) >= keep_interval {
-            retained_backups.insert(backup.clone());
-            last_keep_index = i;
+        for (i, (backup, _)) in backups_with_dates.iter().enumerate() {
+            if i == 0 || (i - last_keep_index) >= keep_interval {
+                retained_backups.insert(backup.clone());
+                last_keep_index = i;
+            }
         }
+        backups_with_dates.retain(|(backup_name, _)| !retained_backups.contains(backup_name));
+
+        if backups_with_dates.is_empty() { break; }
     }
 
     // Filter original backups to determine which should be deleted
