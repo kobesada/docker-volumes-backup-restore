@@ -140,7 +140,7 @@ impl Server {
         let sess = self.connect()?;
 
         let mut channel = sess.channel_session()?;
-        let command = format!("rm {}", file_name);
+        let command = format!("rm {}/{}", self.config.server_directory, file_name);
         channel.exec(&command)?;
 
         let mut output = String::new();
