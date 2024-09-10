@@ -133,6 +133,24 @@ fn get_volume_dirs(backup_folder_path: &str) -> Result<Vec<String>, Box<dyn Erro
         .collect())
 }
 
+/// Removes old backups from the server based on the retention policy.
+///
+/// This function connects to the server using the provided configuration,
+/// retrieves the list of backup files, and determines which backups to delete
+/// according to the retention policy.
+///
+/// # Arguments
+///
+/// * `server_config` - A reference to a `ServerConfig` struct containing the server's configuration.
+/// * `retention_config` - A reference to a `RetentionPolicy` struct defining the backup retention rules.
+///
+/// # Returns
+///
+/// * `Result<(), Box<dyn Error>>` - Returns `Ok(())` on success, or an `Error` if something goes wrong.
+///
+/// # Errors
+///
+/// This function returns errors that might occur while listing or deleting files from the server.
 pub fn remove_old_backups(
     server_config: &ServerConfig,
     retention_config: &RetentionPolicy,
@@ -143,6 +161,7 @@ pub fn remove_old_backups(
     let backup_names = server.list_files()?.into_iter().filter(|file_name|
         file_name.starts_with("backup-") && file_name.ends_with(".tar.gz")).collect();
 
+    // Determine which backups to delete based on the retention policy
     let backups_to_delete = filter_backups_to_delete(backup_names, retention_config);
 
     // Delete old backups that are not retained
@@ -153,25 +172,23 @@ pub fn remove_old_backups(
     Ok(())
 }
 
-/// Helper function to parse the backup name to a DateTime object
-fn parse_backup_date(backup: &str) -> Option<DateTime<Utc>> {
-    let prefix = "backup-";
-    let suffix = ".tar.gz";
-
-    if !backup.starts_with(prefix) || !backup.ends_with(suffix) {
-        return None;
-    }
-
-    let datetime_str = &backup[prefix.len()..backup.len() - suffix.len()];
-    if let Ok(naive_dt) = NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%dT%H-%M-%S") {
-        return Some(Utc.from_utc_datetime(&naive_dt));
-    }
-
-    None
-}
-
-/// Function to filter backups that will NOT be persisted based on retention rules
-pub fn filter_backups_to_delete(backups: Vec<String>, retention: &RetentionPolicy) -> Vec<String> {
+/// Filters backups to determine which ones should be deleted based on the retention policy.
+///
+/// This function first filters out backups that are older than the retention period. Then,
+/// it determines which backups to keep based on the specified retention count and interval.
+/// Backups are evenly distributed through the retention period, ensuring that the latest backup
+/// is always retained and the amount of backups in the period does not exceed the retention count.
+/// The function returns a vector of backup file names that should be deleted.
+///
+/// # Arguments
+///
+/// * `backups` - A vector of backup file names (strings) to be evaluated.
+/// * `retention` - A reference to a `RetentionPolicy` struct defining the backup retention rules.
+///
+/// # Returns
+///
+/// * `Vec<String>` - A vector of backup file names that should be deleted.
+fn filter_backups_to_delete(backups: Vec<String>, retention: &RetentionPolicy) -> Vec<String> {
     let now = Utc::now();
     let retention_period = Duration::days(retention.period as i64);
 
@@ -189,6 +206,7 @@ pub fn filter_backups_to_delete(backups: Vec<String>, retention: &RetentionPolic
     // Collect backups to keep, ensuring one per interval
     let mut retained_backups: HashSet<String> = HashSet::new();
 
+    // Filter the backups that they are evenly distributed through the retention period
     let keep_interval = (backups_with_dates.len() as f64 / retention.count as f64).ceil() as usize;
     let mut last_keep_index = 0;
 
@@ -203,4 +221,34 @@ pub fn filter_backups_to_delete(backups: Vec<String>, retention: &RetentionPolic
     backups.into_iter()
         .filter(|b| !retained_backups.contains(b))
         .collect()
+}
+
+/// Parses a backup file name to extract the date and time it was created.
+///
+/// The file name should start with "backup-" and end with ".tar.gz". The date and time
+/// should be in the format "YYYY-MM-DDTHH-MM-SS". If the file name does not conform to
+/// this format, `None` is returned.
+///
+/// # Arguments
+///
+/// * `backup` - A string slice containing the backup file name.
+///
+/// # Returns
+///
+/// * `Option<DateTime<Utc>>` - Returns `Some(DateTime<Utc>)` if parsing is successful,
+///   or `None` if the file name does not match the expected format.
+fn parse_backup_date(backup: &str) -> Option<DateTime<Utc>> {
+    let prefix = "backup-";
+    let suffix = ".tar.gz";
+
+    if !backup.starts_with(prefix) || !backup.ends_with(suffix) {
+        return None;
+    }
+
+    let datetime_str = &backup[prefix.len()..backup.len() - suffix.len()];
+    if let Ok(naive_dt) = NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%dT%H-%M-%S") {
+        return Some(Utc.from_utc_datetime(&naive_dt));
+    }
+
+    None
 }
