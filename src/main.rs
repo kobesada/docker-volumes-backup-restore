@@ -6,9 +6,8 @@ use crate::backup::{configure_cron_scheduled_backup, run_backup};
 use crate::restore::restore_volumes;
 use crate::utility::configs::retention_policy::RetentionPolicy;
 use crate::utility::configs::server_config::ServerConfig;
+use std::env;
 use std::error::Error;
-use std::path::Path;
-use std::{env, fs};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -18,9 +17,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let action = env::var("ACTION")?;
 
     const BACKUP_TEMP_PATH: &str = "backup-temp";
-
-    // Create the temp directory if it doesn't exist
-    if !Path::new(BACKUP_TEMP_PATH).exists() { fs::create_dir_all(BACKUP_TEMP_PATH)?; }
 
     match action.as_str() {
         "backup" => {

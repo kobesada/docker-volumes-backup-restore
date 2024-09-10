@@ -8,6 +8,7 @@ use cron::Schedule;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
+use std::path::Path;
 use std::str::FromStr;
 use tokio::time::sleep;
 
@@ -79,12 +80,17 @@ pub async fn configure_cron_scheduled_backup(server_config: &ServerConfig,
 pub fn run_backup(server_config: &ServerConfig, retention_config: &RetentionPolicy, temp_path: &str) -> Result<(), Box<dyn Error>> {
     const BACKUP_PATH: &str = "/backup";
 
+    // Create the temp directory if it doesn't exist
+    if !Path::new(temp_path).exists() { fs::create_dir_all(temp_path)?; }
+
     let mut archives_paths: Vec<String> = Vec::new();
 
     remove_old_backups(server_config, retention_config)?;
 
+    let volume_names = get_volume_dirs(BACKUP_PATH)?;
+
     // Compress each volume directory into a tar.gz archive
-    for volume in &get_volume_dirs(BACKUP_PATH)? {
+    for volume in &volume_names {
         let backup_archive_path = format!("{}/{}.tar.gz", temp_path, volume);
         let volume_path = format!("{}/{}", BACKUP_PATH, volume);
         archives_paths.push(backup_archive_path.clone());
@@ -110,7 +116,8 @@ pub fn run_backup(server_config: &ServerConfig, retention_config: &RetentionPoli
 
     remove_old_backups(server_config, retention_config)?;
 
-    println!("Backup completed successfully.");
+    println!("Backup completed successfully. The {:?} volumes have been backed up to the {}",
+             volume_names, server_combined_backup_path);
     Ok(())
 }
 

@@ -1,5 +1,6 @@
 use crate::backup::run_backup;
 use crate::utility::compression::decompress_file_from_tar;
+use crate::utility::configs::retention_policy::RetentionPolicy;
 use crate::utility::configs::server_config::ServerConfig;
 use crate::utility::docker::{start_containers, stop_containers};
 use crate::utility::server::Server;
@@ -8,7 +9,6 @@ use fs_extra::{move_items, remove_items};
 use std::error::Error;
 use std::fs;
 use std::path::Path;
-use crate::utility::configs::retention_policy::RetentionPolicy;
 
 /// Restores specified Docker volumes from a backup file on a remote server.
 ///
@@ -35,6 +35,9 @@ pub fn restore_volumes(server_config: &ServerConfig,
                        volumes_to_be_restored: &str,
                        temp_path: &str) -> Result<(), Box<dyn Error>> {
     let server = Server::new(server_config.clone());
+
+    // Create the temp directory if it doesn't exist
+    if !Path::new(temp_path).exists() { fs::create_dir_all(temp_path)?; }
 
     // Determine the backup file to restore (either specified or the latest)
     let backup_file_name = if backup_to_be_restored == "latest" {
