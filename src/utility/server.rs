@@ -49,7 +49,7 @@ impl Server {
     ///
     /// * `Result<(), Box<dyn Error>>` - An empty result if the upload is successful, or an error if something goes wrong.
     pub fn upload_file(&self, remote_file_path: &str, local_file_path: &str) -> Result<(), Box<dyn Error>> {
-        let mut sess = self.connect()?;
+        let sess = self.connect()?;
 
         let local_file_metadata = fs::metadata(local_file_path)?;
         let file_size = local_file_metadata.len();
@@ -80,7 +80,7 @@ impl Server {
     ///
     /// * `Result<(), Box<dyn Error>>` - An empty result if the download is successful, or an error if something goes wrong.
     pub fn download_file(&self, remote_file_path: &str, local_file_path: &str) -> Result<(), Box<dyn Error>> {
-        let mut sess = self.connect()?;
+        let sess = self.connect()?;
 
         let (mut remote_file, _) = sess.scp_recv(Path::new(remote_file_path))?;
         let mut local_file = File::create(local_file_path)?;
@@ -107,7 +107,7 @@ impl Server {
     ///
     /// * `Result<String, Box<dyn Error>>` - The name of the latest backup file as a string, or an error if no backups are found or something goes wrong.
     pub fn get_latest_backup_file_name(&self) -> Result<String, Box<dyn Error>> {
-        let mut sess = self.connect()?;
+        let sess = self.connect()?;
 
         let mut channel = sess.channel_session()?;
         let command = format!("ls -t {}/backup-*.tar.gz", self.config.server_directory);
@@ -137,7 +137,7 @@ impl Server {
     ///
     /// * `Result<(), Box<dyn Error>>` - An empty result if the file deletion is successful, or an error if something goes wrong.
     pub fn delete_file(&self, file_name: &str) -> Result<(), Box<dyn Error>> {
-        let mut sess = self.connect()?;
+        let sess = self.connect()?;
 
         let mut channel = sess.channel_session()?;
         let command = format!("rm {}", file_name);
@@ -160,7 +160,7 @@ impl Server {
     ///
     /// * `Result<Vec<String>, Box<dyn Error>>` - A vector of file names if successful, or an error if something goes wrong.
     pub fn list_files(&self) -> Result<Vec<String>, Box<dyn Error>> {
-        let mut sess = self.connect()?;
+        let sess = self.connect()?;
 
         let mut channel = sess.channel_session()?;
         let command = format!("ls -1 {}", self.config.server_directory); // List files in the server's backup directory
