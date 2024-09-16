@@ -80,8 +80,8 @@ SERVER_DIRECTORY=/path/to/my/backup/folder
 
 ### Backup Configuration (for `backup` action)
 
-- **BACKUP_CRON**: Optional. Defines the cron schedule for backups (e.g., `'0 2 * * * * *'`). If not set, the backup
-  runs only once.
+- **BACKUP_CRON**: Optional. Defines the cron schedule for backups (e.g., `'0 0 * * * * *'`). If not set, the backup
+  runs only once. See [Cron Expression Syntax](https://docs.rs/cron/0.12.1/cron/).
 - **BACKUP_RETENTION_COUNT**: Optional. Defines the maximum number of backups to keep. The latest backup is always
   retained. If not set, backups are kept indefinitely.
 - **BACKUP_RETENTION_PERIOD_IN_DAYS**: Optional. Defines how many days to retain backups. Older backups are
@@ -107,7 +107,7 @@ SERVER_USER=root
 SERVER_DIRECTORY=/path/to/my/backup/folder
 
 ACTION=backup
-BACKUP_CRON='0 2 * * *'
+BACKUP_CRON='0 0 2 * * * *'
 ```
 
 ### Setup Backup Rotation
@@ -121,7 +121,7 @@ SERVER_USER=root
 SERVER_DIRECTORY=/path/to/my/backup/folder
 
 ACTION=backup
-BACKUP_CRON='0 2 * * *'
+BACKUP_CRON='0 0 2 * * * *'
 BACKUP_RETENTION_COUNT=12
 BACKUP_RETENTION_PERIOD_IN_DAYS=7
 ```
