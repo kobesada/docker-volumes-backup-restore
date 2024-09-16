@@ -4,3 +4,4 @@
 .ssh
 backup.env
 backup-temp
+docker-compose.yml
