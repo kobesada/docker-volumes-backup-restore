@@ -20,9 +20,11 @@ Docker Compose setup.
 2. It stops containers using these volumes, archives the volume, restarts the containers, and uploads the backup to a
    designated server via SSH.
 3. Any mounted directory (even non-Docker volumes) can also be backed up if mounted to `/backup`.
-4. Backups can be scheduled using cron or executed manually.
-5. Restores can be performed for all or specific volumes from any backup.
-6. Before performing a restore, the program automatically creates a backup of the current state to prevent accidental
+4. The retention policy ensures that backups are kept according to the specified count and period, using a probabilistic
+   weighted distribution where older backups are more likely to be retained.
+5. Backups can be scheduled using cron or executed manually.
+6. Restores can be performed for all or specific volumes from any backup.
+7. Before performing a restore, the program automatically creates a backup of the current state to prevent accidental
    data loss.
 
 ## Example `docker-compose.yml` Setup
@@ -49,11 +51,15 @@ volumes:
 
 ### Explanation
 
-- **Volume Handling**: If a folder in `/backup` matches the name of a Docker volume (e.g., `/backup/my_media`
-  corresponds to the `my_media` volume name), the program will stop containers using that volume, archive the data, and
-  restart the containers to preserve data consistency.
-- **Non-Docker Volumes**: You can back up other folders by mounting them to `/backup`. If backing up a single file, wrap
-  it in a folder before mounting.
+- **Volume Handling**: The program identifies Docker volumes by matching folder names inside `/backup` to the
+  corresponding Docker volume names (e.g., `/backup/my_media` for the `my_media` volume). It stops containers using
+  those volumes, archives the data, then restarts the containers to ensure data consistency.
+- **Backing Up Non-Docker Volumes**: You can also back up regular folders by mounting them to `/backup`. If you're
+  backing up a single file, enclose it in a folder before mounting it.
+- **SSH Key Handling**: Ensure that your SSH private key is stored at `~/.ssh/id_rsa` or update the volume path in the
+  configuration to your specific key location.
+- **Docker Socket Access**: For the program to manage Docker containers (stop and start), it needs access to the Docker
+  socket. Make sure the socket is correctly mounted as `/var/run/docker.sock:/var/run/docker.sock`.
 
 ## Environment Variables
 
@@ -79,7 +85,7 @@ SERVER_DIRECTORY=/path/to/my/backup/folder
 - **BACKUP_RETENTION_COUNT**: Optional. Defines the maximum number of backups to keep. The latest backup is always
   retained. If not set, backups are kept indefinitely.
 - **BACKUP_RETENTION_PERIOD_IN_DAYS**: Optional. Defines how many days to retain backups. Older backups are
-  automatically deleted. If not set, backups are not deleted based on age.
+  automatically deleted based on a weighted retention system. If not set, backups are not deleted based on age.
 
 ### Restore Configuration (for `restore` action)
 
@@ -87,21 +93,6 @@ SERVER_DIRECTORY=/path/to/my/backup/folder
   backup (e.g., `backup-2024-09-10T16-02-47.tar.gz`).
 - **VOLUME_TO_BE_RESTORED**: Specify `'all'` to restore all volumes, or list specific volumes (e.g., `'my_db'`, or
   `'my_db, my_media'`).
-
-## Running the Program
-
-1. Clone the repository and build the Docker image:
-   ```bash
-   docker-compose build
-   ```
-
-2. Start the backup service:
-   ```bash
-   docker-compose up
-   ```
-
-3. Adjust your environment variables in the `backup.env` file to configure backup retention, server details, and whether
-   you want to run a backup or restore.
 
 ## Example Scenarios
 
