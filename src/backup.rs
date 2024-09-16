@@ -180,15 +180,40 @@ pub fn remove_old_backups(
     Ok(())
 }
 
-// Function to calculate weight based on backup age
+/// Calculates a retention weight for a backup based on its age.
+///
+/// # Arguments
+///
+/// * `backup_date` - A reference to the `DateTime<Utc>` representing the backup's date.
+/// * `now` - A reference to the current `DateTime<Utc>`.
+/// * `retention_period` - A `Duration` representing the retention period.
+///
+/// # Returns
+///
+/// * `f64` - A weight between 0.0 and 1.0, where older backups get higher values (closer to 1.0),
+///   and newer backups get lower values (closer to 0.0).
 fn calculate_weight(backup_date: &DateTime<Utc>, now: &DateTime<Utc>, retention_period: Duration) -> f64 {
     let age = now.sub(backup_date).num_seconds() as f64;
     let retention_seconds = retention_period.num_seconds() as f64;
-
-    // Older backups get a higher weight, newer backups get a smaller weight
     (age / retention_seconds).min(1.0)
 }
 
+/// Filters backups to be deleted based on the retention policy.
+///
+/// This function processes a list of backups by parsing their dates, retaining
+/// the most recent backup, and probabilistically selecting other backups to retain
+/// based on their age. Backups that are older are more likely to be retained, while
+/// newer backups (except the most recent) are more likely to be deleted.
+///
+/// # Arguments
+///
+/// * `backups` - A `Vec<String>` containing the list of backup file names.
+/// * `retention` - A reference to a `RetentionPolicy` struct that defines how many backups to keep
+///   (`retention.count`) and the retention period in days (`retention.period`).
+///
+/// # Returns
+///
+/// * `Vec<String>` - A vector of backup file names that should be deleted.
 fn filter_backups_to_delete(backups: Vec<String>, retention: &RetentionPolicy) -> Vec<String> {
     let now = Utc::now();
     let retention_period = Duration::days(retention.period as i64);
