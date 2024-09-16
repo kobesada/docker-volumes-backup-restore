@@ -8,8 +8,10 @@ use cron::Schedule;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
+use std::ops::Sub;
 use std::path::Path;
 use std::str::FromStr;
+use rand::Rng;
 use tokio::time::sleep;
 
 /// Configures and manages a scheduled backup process based on a cron expression.
@@ -178,27 +180,19 @@ pub fn remove_old_backups(
     Ok(())
 }
 
-/// Filters backups to determine which ones should be deleted based on the retention policy.
-///
-/// This function first filters out backups that are older than the retention period. Then,
-/// it determines which backups to keep based on the specified retention count and interval.
-/// Backups are evenly distributed through the retention period, ensuring that the latest backup
-/// is always retained and the amount of backups in the period does not exceed the retention count.
-/// The function returns a vector of backup file names that should be deleted.
-///
-/// # Arguments
-///
-/// * `backups` - A vector of backup file names (strings) to be evaluated.
-/// * `retention` - A reference to a `RetentionPolicy` struct defining the backup retention rules.
-///
-/// # Returns
-///
-/// * `Vec<String>` - A vector of backup file names that should be deleted.
+// Function to calculate weight based on backup age
+fn calculate_weight(backup_date: &DateTime<Utc>, now: &DateTime<Utc>, retention_period: Duration) -> f64 {
+    let age = now.sub(backup_date).num_seconds() as f64;
+    let retention_seconds = retention_period.num_seconds() as f64;
+
+    // Older backups get a higher weight, newer backups get a smaller weight
+    (age / retention_seconds).min(1.0)
+}
+
 fn filter_backups_to_delete(backups: Vec<String>, retention: &RetentionPolicy) -> Vec<String> {
     let now = Utc::now();
     let retention_period = Duration::days(retention.period as i64);
 
-    // Parse backups and filter based on the retention period
     let mut backups_with_dates: Vec<(String, DateTime<Utc>)> = backups.iter()
         .filter_map(|b| parse_backup_date(b).map(|d| (b.clone(), d))) // Clone the backup string here
         .collect();
@@ -209,23 +203,24 @@ fn filter_backups_to_delete(backups: Vec<String>, retention: &RetentionPolicy) -
     // Sort backups by date in descending order (newest first)
     backups_with_dates.sort_by(|a, b| b.1.cmp(&a.1));
 
-    // Collect backups to keep, ensuring one per interval
+
+    if backups_with_dates.is_empty() { return backups; }
+
+    // Ensure the newest backup is always retained
+    let (newest_backup, _) = backups_with_dates.remove(0);
     let mut retained_backups: HashSet<String> = HashSet::new();
+    retained_backups.insert(newest_backup);
 
-    // Filter the backups that they are evenly distributed through the retention period.
-    while retained_backups.len() < retention.count {
-        let keep_interval = (backups_with_dates.len() as f64 / (retention.count - retained_backups.len()) as f64).ceil() as usize;
-        let mut last_keep_index = 0;
+    // Assign weights and probabilistically filter backups
+    let mut rng = rand::thread_rng();
 
-        for (i, (backup, _)) in backups_with_dates.iter().enumerate() {
-            if i == 0 || (i - last_keep_index) >= keep_interval {
-                retained_backups.insert(backup.clone());
-                last_keep_index = i;
+    while retained_backups.len() < retention.count && !backups_with_dates.is_empty() {
+        for (index, (_, date)) in backups_with_dates.iter().enumerate() {  // Skip the newest backup
+            if rng.gen() <= calculate_weight(date, &now, retention_period) {
+                let (backup, _) = backups_with_dates.remove(index);
+                retained_backups.insert(backup);
             }
         }
-        backups_with_dates.retain(|(backup_name, _)| !retained_backups.contains(backup_name));
-
-        if backups_with_dates.is_empty() { break; }
     }
 
     // Filter original backups to determine which should be deleted
