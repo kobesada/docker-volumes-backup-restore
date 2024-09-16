@@ -240,10 +240,14 @@ fn filter_backups_to_delete(backups: Vec<String>, retention: &RetentionPolicy) -
     let mut rng = rand::thread_rng();
 
     while retained_backups.len() < retention.count && !backups_with_dates.is_empty() {
-        for (index, (_, date)) in backups_with_dates.iter().enumerate() {  // Skip the newest backup
-            if rng.gen() <= calculate_weight(date, &now, retention_period) {
+        for (index, (_, date)) in backups_with_dates.iter().enumerate() {
+            let random_number: f64 = rng.gen();
+            let weight = calculate_weight(date, &now, retention_period);
+
+            if random_number <= weight {
                 let (backup, _) = backups_with_dates.remove(index);
                 retained_backups.insert(backup);
+                break;
             }
         }
     }
